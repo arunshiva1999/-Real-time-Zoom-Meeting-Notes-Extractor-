@@ -1,0 +1,4 @@
+# No external libraries required
+pyperclip
+Flask
+requests

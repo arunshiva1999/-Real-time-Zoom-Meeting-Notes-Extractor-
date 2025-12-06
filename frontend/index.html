@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Live Meeting Summary UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#ffffff; --card:#f9f9fb; --muted:#6b7280; --accent:#0b69ff;
+      --success:#16a34a; --danger:#ef4444;
+    }
+    html,body{height:100%; margin:0; font-family:Inter, Arial, sans-serif; background:var(--bg); color:#111827;}
+    .app{max-width:1000px; margin:20px auto; padding:18px;}
+    header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;}
+    .title {display:flex; gap:12px; align-items:center;}
+    h1{font-size:20px; margin:0;}
+    .meta {color:var(--muted); font-size:13px;}
+    .controls {display:flex; gap:8px; margin:12px 0 16px 0; flex-wrap:wrap;}
+    textarea{width:100%; height:140px; font-family: monospace; padding:10px; box-sizing:border-box; border-radius:8px; border:1px solid #e6e9ef; resize:vertical;}
+    button{background:var(--accent); color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;}
+    button.secondary{background:#f3f4f6; color:#111827; border:1px solid #e6e9ef;}
+    button.small{padding:6px 8px; font-size:13px;}
+    #summaryCard {background:var(--card); padding:14px; border-radius:10px; min-height:180px; border:1px solid #eef2f7;}
+    .statusRow{display:flex; gap:12px; align-items:center;}
+    .dot{width:10px;height:10px;border-radius:50%;}
+    .dot.online{background:var(--success);}
+    .dot.offline{background:var(--danger);}
+    .liveBadge{background:linear-gradient(90deg,#34d399,#10b981); color:white; padding:4px 8px; border-radius:999px; font-size:12px;}
+    .small{font-size:13px;color:var(--muted);}
+    .row {display:flex; gap:8px; align-items:center;}
+    .right {margin-left:auto; display:flex; gap:8px; align-items:center;}
+    pre.markdown{white-space:pre-wrap; font-family:inherit;}
+    footer{margin-top:18px; color:var(--muted); font-size:13px;}
+    @media (max-width:640px){ .title h1{font-size:18px} .controls{flex-direction:column; align-items:stretch} }
+  </style>
+  <!-- marked.js for Markdown -> HTML rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">
+        <h1>Live Meeting Summary</h1>
+        <div class="meta" id="meetingInfo">(No meeting selected)</div>
+      </div>
+      <div class="statusRow">
+        <div id="serverDot" class="dot offline" title="Server status"></div>
+        <div class="small" id="serverStatus">Server: offline</div>
+        <div class="right">
+          <div id="liveIndicator" style="display:none;" class="liveBadge">LIVE</div>
+          <div class="small" id="lastUpdated">—</div>
+        </div>
+      </div>
+    </header>
+
+    <div>
+      <label><strong>Paste transcript here (or click Send to post to server):</strong></label>
+      <textarea id="pasteBox" placeholder="Paste copied transcript text here..."></textarea>
+      <div class="controls">
+        <button id="sendBtn">Send to Server</button>
+        <button class="secondary" id="clearBtn">Clear Transcript</button>
+        <button class="secondary small" id="downloadTranscript">Download Transcript</button>
+        <button class="secondary small" id="downloadSummary">Download Summary</button>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+          <label class="small" for="autoRefresh">Auto-refresh</label>
+          <input id="autoRefresh" type="checkbox" checked />
+        </div>
+      </div>
+    </div>
+
+    <section>
+      <h3 style="margin:0 0 8px 0">Live Summary</h3>
+      <div id="summaryCard">
+        <div id="summary" class="markdown">No summary yet.</div>
+      </div>
+    </section>
+
+    <footer>
+      <div>How to use: open the Zoom meeting in Chrome (web client), enable Live Transcript, install/start the extension (or run clipboard autoposter). The backend processes transcripts and updates this page automatically.</div>
+    </footer>
+  </div>
+
+<script>
+/* ---------- Helpers ---------- */
+const pasteBox = document.getElementById('pasteBox');
+const sendBtn = document.getElementById('sendBtn');
+const clearBtn = document.getElementById('clearBtn');
+const dlTransBtn = document.getElementById('downloadTranscript');
+const dlSumBtn = document.getElementById('downloadSummary');
+const summaryDiv = document.getElementById('summary');
+const serverDot = document.getElementById('serverDot');
+const serverStatus = document.getElementById('serverStatus');
+const liveIndicator = document.getElementById('liveIndicator');
+const lastUpdated = document.getElementById('lastUpdated');
+const meetingInfo = document.getElementById('meetingInfo');
+const autoRefreshInput = document.getElementById('autoRefresh');
+
+let polling = true;
+let lastMd = '';
+let serverOnline = false;
+
+/* Read meeting param from URL and show it */
+const params = new URLSearchParams(window.location.search);
+const meetingParam = params.get('meeting');
+if (meetingParam) {
+  meetingInfo.textContent = `Meeting: ${decodeURIComponent(meetingParam)}`;
+} else {
+  meetingInfo.textContent = "(No meeting selected)";
+}
+
+/* Send transcript to backend /upload */
+sendBtn.addEventListener('click', async () => {
+  const text = pasteBox.value.trim();
+  if (!text) return alert('Paste transcript text first.');
+  try {
+    const r = await fetch('/upload', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text })
+    });
+    if (!r.ok) throw new Error('Upload failed');
+    pasteBox.value = '';
+  } catch (e) {
+    alert('Upload failed. Is the backend running?');
+  }
+});
+
+/* Clear paste box */
+clearBtn.addEventListener('click', () => pasteBox.value = '');
+
+/* Download handlers */
+dlTransBtn.addEventListener('click', () => window.location.href = '/download/transcript');
+dlSumBtn.addEventListener('click', () => window.location.href = '/download/summary');
+
+/* Poll summary endpoint */
+async function fetchSummary() {
+  try {
+    const r = await fetch('/summary', { cache: 'no-store' });
+    if (!r.ok) throw new Error('bad response');
+    const j = await r.json();
+    serverOnline = true;
+    serverDot.classList.remove('offline'); serverDot.classList.add('online');
+    serverStatus.textContent = 'Server: online';
+    // Update markdown only when changed
+    if (j.markdown && j.markdown !== lastMd) {
+      lastMd = j.markdown;
+      // render markdown to HTML using marked
+      try {
+        summaryDiv.innerHTML = marked.parse(j.markdown || '');
+      } catch(e) {
+        summaryDiv.textContent = j.markdown || 'No summary yet.';
+      }
+      // show live indicator briefly
+      liveIndicator.style.display = 'inline-block';
+      setTimeout(()=>{ liveIndicator.style.display = 'none'; }, 3500);
+      lastUpdated.textContent = 'Updated: ' + (new Date()).toLocaleTimeString();
+    }
+  } catch (e) {
+    // offline state
+    serverOnline = false;
+    serverDot.classList.remove('online'); serverDot.classList.add('offline');
+    serverStatus.textContent = 'Server: offline';
+    // show error in summary if nothing present
+    if (!lastMd) summaryDiv.textContent = 'Server not reachable. Start backend at http://localhost:8000';
+  }
+}
+
+/* Polling loop controlled by Auto-refresh checkbox */
+async function pollLoop() {
+  if (autoRefreshInput.checked) {
+    await fetchSummary();
+  }
+  setTimeout(pollLoop, 2000);
+}
+
+/* Start polling */
+pollLoop();
+
+/* Allow manual refresh by pressing Ctrl+R when focused */
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+    e.preventDefault();
+    fetchSummary();
+  }
+});
+
+/* Make summary clickable to copy all text (optional) */
+summaryDiv.addEventListener('dblclick', () => {
+  try {
+    const text = summaryDiv.innerText || summaryDiv.textContent || '';
+    navigator.clipboard.writeText(text);
+    alert('Summary copied to clipboard');
+  } catch(e) { /* ignore */ }
+});
+
+/* initial check */
+fetchSummary();
+</script>
+</body>
+</html>

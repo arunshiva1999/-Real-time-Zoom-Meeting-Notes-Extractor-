@@ -1,0 +1,13 @@
+
+# 2) `.kiro/steering.yaml` (save to `/.kiro/steering.yaml`)
+```yaml
+project:
+  name: zoom-live-transcript-extractor
+description: "Real-time Zoom transcript auto-capture (Chrome extension) + Flask backend UI"
+tasks:
+  - id: run_backend
+    description: "Start the backend UI for demo"
+    run: "python backend/app_ui.py"
+  - id: run_autoposter
+    description: "Run the clipboard autoposter (alternative to extension)"
+    run: "python clipboard_autopost.py"

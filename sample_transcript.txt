@@ -1,0 +1,15 @@
+Attendees: Alice, Bob, Charles, Deepa
+
+Alice: Welcome everyone. We need to finalize who will own the deployment pipeline.
+
+Bob: Action Item: Bob to prepare the deployment checklist by Dec 10.
+
+Deepa: I will take care of the testing steps.
+
+Charles: Decision: We'll use the blue-green strategy for deployment.
+
+Alice: Action - Alice: Follow up with infra for permissions.
+
+Bob: We'll have a follow-up meeting next week to review progress.
+
+Notes: John couldn't join. Alice to assign the docs.

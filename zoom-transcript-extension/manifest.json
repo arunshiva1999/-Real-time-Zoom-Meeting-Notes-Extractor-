@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Zoom Transcript Auto-Capture",
+  "version": "1.0",
+  "description": "Automatically capture Zoom Web Client live transcript and POST to server.",
+  "permissions": ["scripting", "storage", "activeTab", "alarms"],
+  "host_permissions": [
+    "https://*.zoom.us/*",
+    "https://zoom.us/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Zoom Transcript Capture"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.zoom.us/*", "https://zoom.us/*"],
+      "js": ["content_script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
