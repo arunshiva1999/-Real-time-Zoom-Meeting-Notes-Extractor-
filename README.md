@@ -46,3 +46,4 @@ This project automatically captures Zoom Web Client live transcript (captions) a
 1. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
+# -Real-time-Zoom-Meeting-Notes-Extractor-
